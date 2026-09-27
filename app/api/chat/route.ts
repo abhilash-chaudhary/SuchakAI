@@ -43,10 +43,10 @@ export async function POST(req: NextRequest) {
     // 2. Prepare conversation history
     let conversationHistory = conversationMemory.get(conversationId) || [];
 
-    // 3. Build context prompt
-    const contextPrompt = `You are SuchakAI, a friendly and knowledgeable assistant helping Indian citizens understand government schemes and subsidies.
+    // 3. Build system instruction with citizen profile context
+    const systemInstruction = `You are SuchakAI, an intelligent, conversational government scheme advisor for Indian citizens.
 
-User Profile:
+Citizen Profile:
 - Name: ${profile.name}
 - Age: ${profile.age} years
 - State: ${profile.state}
@@ -54,41 +54,51 @@ User Profile:
 - Occupation: ${profile.occupation}
 - Education: ${profile.education}
 - Annual Income: ₹${profile.annualIncome.toLocaleString('en-IN')}
-- Eligible for: ${topSchemeNames || 'No schemes currently matched'}
+- Top Eligible Schemes: ${topSchemeNames || 'General national schemes'}
 
-Your instructions:
-1. Provide personalized advice based on their specific profile and eligible schemes
-2. Focus on practical steps: what documents they need, where to apply, application deadlines
-3. Be encouraging but honest about eligibility constraints
-4. If they ask about a scheme they don't qualify for, gently explain why and suggest alternatives
-5. Always cite specific scheme names from their eligible list when relevant
-6. Keep responses concise (under 150 words) and easy to understand
-7. Use checkmarks (✓) for positive points and (⚠️) for important caveats
-8. Provide direct links to application portals when available
-9. If you don't have specific information, suggest they verify on the official scheme portal
-
-User's question: "${message}"`;
+Core Guidelines:
+1. Directly answer the user's specific question concisely and helpfully.
+2. DO NOT start every response with repetitive greetings like "Hello [name], as a [occupation] from [state]...". Greet naturally only if they are saying hello.
+3. For specific inquiries (e.g. documents, application steps, eligibility), dive straight into the accurate answer.
+4. Only mention the citizen's specific background when directly relevant to answering the question.
+5. Use clear formatting, bullet points (✓), and caveats (⚠️) where helpful.
+6. Provide official portal links when referring to scheme applications.`;
 
     // 4. Try Gemini API if available
     const genAI = getGenAI();
     if (genAI) {
       try {
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+        const startChatSession = (m: ReturnType<NonNullable<typeof genAI>['getGenerativeModel']>) =>
+          m.startChat({
+            history: conversationHistory.map(msg => ({
+              role: msg.role as 'user' | 'model',
+              parts: [{ text: msg.content }],
+            })),
+            generationConfig: {
+              temperature: 0.6,
+              maxOutputTokens: 600,
+            },
+          });
 
-        // Build conversation with history
-        const chat = model.startChat({
-          history: conversationHistory.map(msg => ({
-            role: msg.role as 'user' | 'model',
-            parts: [{ text: msg.content }],
-          })),
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 500,
-          },
-        });
-
-        const response = await chat.sendMessage(contextPrompt);
-        const responseText = response.response.text();
+        let responseText: string;
+        try {
+          const model = genAI.getGenerativeModel({
+            model: 'gemini-2.5-flash',
+            systemInstruction,
+          });
+          const chat = startChatSession(model);
+          const response = await chat.sendMessage(message);
+          responseText = response.response.text();
+        } catch (primaryErr) {
+          console.warn('Gemini 2.5 Flash chat failed, attempting fallback to gemini-3.8-flash:', primaryErr);
+          const fallbackModel = genAI.getGenerativeModel({
+            model: 'gemini-3.8-flash',
+            systemInstruction,
+          });
+          const chat = startChatSession(fallbackModel);
+          const response = await chat.sendMessage(message);
+          responseText = response.response.text();
+        }
 
         // Update conversation memory
         conversationHistory = [

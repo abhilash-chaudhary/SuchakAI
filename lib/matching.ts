@@ -128,7 +128,7 @@ export function evaluateSchemeEligibility(
 
   // Bonus for Status & Interest Affinity: 10 pts
   if (scheme.status === 'active') score += 5;
-  if (profile.interests.some(interest => scheme.categoryTag.toLowerCase().includes(interest.toLowerCase().slice(0, 5)))) {
+  if (profile.interests && Array.isArray(profile.interests) && profile.interests.some(interest => typeof interest === 'string' && scheme.categoryTag.toLowerCase().includes(interest.toLowerCase().slice(0, 5)))) {
     score += 5;
   }
 

@@ -81,16 +81,50 @@ export default function DashboardPage() {
       if (stored) { try { setProfile(JSON.parse(stored)); } catch {} }
     };
     loadProfile();
-    const saved = localStorage.getItem('soochai_saved');
-    if (saved) { try { setSavedSchemeIds(JSON.parse(saved)); } catch {} }
+
+    // Load bookmarks (Supabase if authenticated, else localStorage)
+    const loadBookmarks = async () => {
+      try {
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: savedRows } = await supabase
+            .from('saved_schemes')
+            .select('scheme_id')
+            .eq('user_id', user.id);
+          if (savedRows && savedRows.length > 0) {
+            const ids = savedRows.map((r: { scheme_id: string }) => r.scheme_id);
+            setSavedSchemeIds(ids);
+            localStorage.setItem('soochai_saved', JSON.stringify(ids));
+            return;
+          }
+        }
+      } catch {}
+      const saved = localStorage.getItem('soochai_saved');
+      if (saved) { try { setSavedSchemeIds(JSON.parse(saved)); } catch {} }
+    };
+    loadBookmarks();
   }, []);
 
-  const handleToggleBookmark = (schemeId: string) => {
-    const updated = savedSchemeIds.includes(schemeId)
+  const handleToggleBookmark = async (schemeId: string) => {
+    const isCurrentlySaved = savedSchemeIds.includes(schemeId);
+    const updated = isCurrentlySaved
       ? savedSchemeIds.filter(id => id !== schemeId)
       : [...savedSchemeIds, schemeId];
     setSavedSchemeIds(updated);
     localStorage.setItem('soochai_saved', JSON.stringify(updated));
+
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        if (isCurrentlySaved) {
+          await supabase.from('saved_schemes').delete().match({ user_id: user.id, scheme_id: schemeId });
+        } else {
+          await supabase.from('saved_schemes').upsert({ user_id: user.id, scheme_id: schemeId });
+        }
+      }
+    } catch {}
   };
 
   // Deterministic matching

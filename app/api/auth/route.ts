@@ -13,6 +13,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+    const isConfigured = Boolean(
+      supabaseUrl &&
+      !supabaseUrl.includes('placeholder-project')
+    );
+
+    if (!isConfigured) {
+      return NextResponse.json(
+        {
+          error:
+            'Supabase project credentials are not configured in .env.local yet. Please add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to connect your database, or click "Continue as Guest" below to explore without cloud login.',
+        },
+        { status: 400 }
+      );
+    }
+
     if (action === 'signup') {
       const { data, error } = await supabase.auth.signUp({
         email,

@@ -81,26 +81,27 @@ Output ONLY a JSON object with this exact structure:
   ]
 }`;
 
-      // Try gemini-2.0-flash first (fastest, latest), with fallback to gemini-1.5-flash
+      // Try gemini-2.5-flash first (fastest, latest), with fallback to gemini-3.8-flash
       let response;
       try {
-        const model20 = genAI.getGenerativeModel({
-          model: 'gemini-2.0-flash',
+        const model25 = genAI.getGenerativeModel({
+          model: 'gemini-2.5-flash',
           generationConfig: {
             temperature: 0.2,
             responseMimeType: 'application/json',
           },
         });
-        response = await model20.generateContent(prompt);
-      } catch (err20) {
-        const model15 = genAI.getGenerativeModel({
-          model: 'gemini-1.5-flash',
+        response = await model25.generateContent(prompt);
+      } catch (err25) {
+        console.warn('Gemini 2.5 Flash failed, attempting fallback to gemini-3.8-flash:', err25);
+        const model38 = genAI.getGenerativeModel({
+          model: 'gemini-3.8-flash',
           generationConfig: {
             temperature: 0.2,
             responseMimeType: 'application/json',
           },
         });
-        response = await model15.generateContent(prompt);
+        response = await model38.generateContent(prompt);
       }
 
       if (!response) {

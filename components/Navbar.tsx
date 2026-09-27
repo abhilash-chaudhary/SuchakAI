@@ -3,8 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Search, Bell, Sun, Moon, Sparkles, Menu, X } from 'lucide-react';
+import { Search, Bell, Sun, Moon, Sparkles, Menu, X, User, LogOut, LogIn, ChevronDown } from 'lucide-react';
 import { UserProfile } from '@/lib/types';
+import { createClient } from '@/lib/supabase/client';
 
 interface NavbarProps {
   currentProfile?: UserProfile | null;
@@ -14,6 +15,41 @@ export function Navbar({ currentProfile }: NavbarProps) {
   const pathname = usePathname();
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [authUser, setAuthUser] = useState<{ id: string; email?: string; name?: string } | null>(null);
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      const supabase = createClient();
+      supabase.auth.getUser().then(({ data: { user } }) => {
+        if (user) {
+          setAuthUser({
+            id: user.id,
+            email: user.email,
+            name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0],
+          });
+        } else {
+          setAuthUser(null);
+        }
+      }).catch(() => setAuthUser(null));
+
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        if (session?.user) {
+          setAuthUser({
+            id: session.user.id,
+            email: session.user.email,
+            name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0],
+          });
+        } else {
+          setAuthUser(null);
+        }
+      });
+
+      return () => subscription.unsubscribe();
+    } catch {
+      setAuthUser(null);
+    }
+  }, []);
 
   useEffect(() => {
     setMobileMenuOpen(false);
@@ -291,17 +327,80 @@ export function Navbar({ currentProfile }: NavbarProps) {
             )}
           </div>
 
-          <Link
-            href="/onboarding"
-            className="flex items-center gap-2 pl-1 pr-2.5 py-1 rounded-full bg-[var(--card-bg)] border border-[var(--border-subtle)] hover:border-[var(--border-highlight)] transition-all text-xs shadow-sm"
-          >
-            <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-amber-500 to-yellow-400 flex items-center justify-center text-[11px] font-extrabold text-zinc-950 uppercase shadow">
-              {currentProfile?.name ? currentProfile.name.charAt(0) : 'C'}
+          {/* User Account / Sign In */}
+          {authUser ? (
+            <div className="relative">
+              <button
+                onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+                className="flex items-center gap-2 pl-1 pr-2.5 py-1 rounded-full bg-[var(--card-bg)] border border-[var(--border-subtle)] hover:border-[var(--border-highlight)] transition-all text-xs shadow-sm"
+                title="Account Menu"
+              >
+                <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-amber-500 to-yellow-400 flex items-center justify-center text-[11px] font-extrabold text-zinc-950 uppercase shadow">
+                  {authUser.name ? authUser.name.charAt(0) : 'U'}
+                </div>
+                <span className="hidden sm:inline font-semibold text-[var(--text-primary)] max-w-[100px] truncate">
+                  {authUser.name?.split(' ')[0] || 'Account'}
+                </span>
+                <ChevronDown className="w-3 h-3 text-[var(--text-muted)]" />
+              </button>
+
+              {userDropdownOpen && (
+                <>
+                  <div 
+                    className="fixed inset-0 z-40" 
+                    onClick={() => setUserDropdownOpen(false)} 
+                  />
+                  <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-[var(--card-bg)] border border-[var(--border-subtle)] shadow-2xl z-50 overflow-hidden py-1.5 animate-in fade-in slide-in-from-top-2 duration-150">
+                    <div className="px-3.5 py-2 border-b border-[var(--border-subtle)]">
+                      <p className="text-xs font-bold text-[var(--text-primary)] truncate">
+                        {authUser.name || 'Citizen'}
+                      </p>
+                      <p className="text-[11px] text-[var(--text-muted)] truncate">
+                        {authUser.email}
+                      </p>
+                    </div>
+                    <Link
+                      href="/onboarding"
+                      onClick={() => setUserDropdownOpen(false)}
+                      className="flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--card-subtle)] transition-colors"
+                    >
+                      <User className="w-3.5 h-3.5" />
+                      <span>My Profile & Eligibility</span>
+                    </Link>
+                    <button
+                      onClick={async () => {
+                        setUserDropdownOpen(false);
+                        const supabase = createClient();
+                        await supabase.auth.signOut();
+                        window.location.href = '/auth';
+                      }}
+                      className="w-full flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-red-500 hover:bg-red-500/10 transition-colors text-left"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
-            <span className="hidden sm:inline font-semibold text-[var(--text-primary)]">
-              {currentProfile?.name ? currentProfile.name.split(' ')[0] : 'Profile & Account'}
-            </span>
-          </Link>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Link
+                href="/auth"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--accent-yellow)] text-zinc-950 font-bold text-xs hover:bg-amber-400 active:scale-95 transition-all shadow-sm"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>Sign In</span>
+              </Link>
+              <Link
+                href="/onboarding"
+                className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-[var(--card-bg)] border border-[var(--border-subtle)] hover:border-[var(--border-highlight)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-medium text-xs transition-all"
+                title="Guest Profile"
+              >
+                <span>Guest</span>
+              </Link>
+            </div>
+          )}
 
           {/* Mobile Menu Hamburger Button */}
           <button
@@ -338,6 +437,41 @@ export function Navbar({ currentProfile }: NavbarProps) {
                 </Link>
               );
             })}
+            {/* Mobile Auth Button */}
+            <div className="pt-2 mt-2 border-t border-[var(--border-subtle)]">
+              {authUser ? (
+                <div className="flex items-center justify-between px-3.5 py-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-[var(--accent-yellow)] text-zinc-950 font-bold flex items-center justify-center text-xs">
+                      {authUser.name ? authUser.name.charAt(0) : 'U'}
+                    </div>
+                    <span className="text-xs font-semibold text-[var(--text-primary)] truncate max-w-[150px]">
+                      {authUser.name}
+                    </span>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      setMobileMenuOpen(false);
+                      const supabase = createClient();
+                      await supabase.auth.signOut();
+                      window.location.href = '/auth';
+                    }}
+                    className="text-xs text-red-500 font-bold hover:underline"
+                  >
+                    Sign Out
+                  </button>
+                </div>
+              ) : (
+                <Link
+                  href="/auth"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-[var(--accent-yellow)] text-zinc-950 font-bold text-xs"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span>Sign In / Create Account</span>
+                </Link>
+              )}
+            </div>
           </div>
         </nav>
       )}
