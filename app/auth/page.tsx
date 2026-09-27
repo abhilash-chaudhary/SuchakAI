@@ -103,11 +103,18 @@ function AuthPageInner() {
     setSuccessMsg('');
     setLoading(true);
     try {
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://suchak-ai.vercel.app';
+      const redirectOrigin =
+        typeof window !== 'undefined' && window.location.hostname === 'localhost'
+          ? window.location.origin
+          : siteUrl.replace(/\/+$/, '');
+      const redirectTo = `${redirectOrigin}/api/auth/callback`;
+
       const supabase = createClient();
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/api/auth/callback`,
+          redirectTo,
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
